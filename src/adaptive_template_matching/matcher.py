@@ -37,7 +37,7 @@ class AdaptiveTemplateMatching:
 
     Update rule
     -----------
-    `update_template` averages ALL accepted z-scored windows, then z-scores again.
+    `_update_template` averages ALL accepted z-scored windows, then z-scores again.
 
     References:
         NumPy Developers. `numpy.lib.stride_tricks.sliding_window_view`.
@@ -60,18 +60,18 @@ class AdaptiveTemplateMatching:
             Slope of the line needed to create the line at the given angle.
         """
         self.template_scaler = template_scaler
-        self.template = self.make_dual_angle_template(template_angls, cp_inds, template_len, 
+        self.template = self._make_dual_angle_template(template_angls, cp_inds, template_len, 
                                                 baseline)
         
         # Flipping the template if wanted, say for marking toe-off rather than heel-strike.
         if reflect:
             self.template = self.template[::-1]
 
-        # Save of starting template shape to be used when resetting the template between datasets.
+        # Save of starting template shape to be used when _resetting the template between datasets.
         self.template_save = self.template.copy()
 
         # Normalizing template shape and initializing other global variables.
-        self.reset()
+        self._reset()
         self.found_indices_scores = np.array([])
 
     # ===== Template construction ======================================================
@@ -86,7 +86,7 @@ class AdaptiveTemplateMatching:
         """
         return np.tan(np.deg2rad(angle_deg))
     
-    def make_dual_angle_template(self, angle_degr_arr: list, 
+    def _make_dual_angle_template(self, angle_degr_arr: list, 
                                 change_points_arr: list,
                                 template_length: int=200,
                                 baseline: float = 0.0):
@@ -260,8 +260,8 @@ class AdaptiveTemplateMatching:
         rng = x.max() - x.min()
         return (x - x.min()) / (rng + 1e-12)
 
-    def reset(self):
-        """ Reset the template shape to the initial basic shape if starting on a new dataset.
+    def _reset(self):
+        """ _Reset the template shape to the initial basic shape if starting on a new dataset.
 
         Args:
             None.
@@ -389,7 +389,7 @@ class AdaptiveTemplateMatching:
 
 
     # --- Core template matching algorithm functions-------------------------
-    def scan_matches(self, data,
+    def _scan_matches(self, data,
                      threshold,
                      amp_max,
                      rel_err,
@@ -527,7 +527,7 @@ class AdaptiveTemplateMatching:
 
         return accepted, scores
 
-    def update_template(self, data: np.ndarray, match_idx: np.ndarray, show_debug: bool=True):
+    def _update_template(self, data: np.ndarray, match_idx: np.ndarray, show_debug: bool=True):
         """ Update the template shape using data from accepted indices.
 
         Args:
@@ -554,7 +554,7 @@ class AdaptiveTemplateMatching:
                             plot_option = "template_composite")
 
 
-    def final_template_match_and_plot(self, name, data,
+    def _final_template_match_and_plot(self, name, data,
                                   threshold, amp_max,
                                   pos_shift, sad_thresh,
                                   min_std=1e-3,
@@ -593,7 +593,7 @@ class AdaptiveTemplateMatching:
         """
 
         # Scanning data with template for matches
-        idx, sco = self.scan_matches(
+        idx, sco = self._scan_matches(
             data,
             threshold,
             amp_max,
@@ -672,7 +672,7 @@ class AdaptiveTemplateMatching:
         for p in range(passes):
             if debug_verbose:
                 print(f"   pass {p+1}/{passes}")
-            idx, _ = self.scan_matches(
+            idx, _ = self._scan_matches(
                 data, thr, amp_max, rel_err,
                 pos_shift=pos_shift,
                 sad_thresh=sad_thresh,
@@ -687,10 +687,10 @@ class AdaptiveTemplateMatching:
                 show_debug=show_debug,
                 debug_verbose=debug_verbose
             )
-            self.update_template(data, idx, show_debug=show_debug)
+            self._update_template(data, idx, show_debug=show_debug)
         
         # Final pass of the refined template
-        final_marked_indices, final_marked_indices_scores = self.final_template_match_and_plot(
+        final_marked_indices, final_marked_indices_scores = self._final_template_match_and_plot(
             name, data, thr, amp_max,
             pos_shift, sad_thresh, min_std, rel_err,
             enforce_low_amp, low_amp_quantile, low_amp_cover,
@@ -714,7 +714,7 @@ class AdaptiveTemplateMatching:
                     cluster_metric: str="sad",
                     cluster_radius: int=None,
                     show_debug: bool=False, debug_verbose: bool=False):
-        """Run the dataset pipeline by resetting the template to the starting piecewise linear function before each dataset.
+        """Run the dataset pipeline by _resetting the template to the starting piecewise linear function before each dataset.
 
         Args:
             data_dict: Mapping of dataset names to input signal arrays.
@@ -739,8 +739,8 @@ class AdaptiveTemplateMatching:
         References:
             NumPy Developers. `numpy.ndarray`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
 
         return_dict = {}
         for dataKey in data_dict:
@@ -756,7 +756,7 @@ class AdaptiveTemplateMatching:
                     show_debug=show_debug, debug_verbose=show_debug
             )
 
-            self.reset()
+            self._reset()
 
         return return_dict
 
@@ -796,8 +796,8 @@ class AdaptiveTemplateMatching:
         References:
             Python Software Foundation. `random.choice`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
 
         datasetToTrain = name
         # Choose a random dataset to adapt the template on
@@ -872,8 +872,8 @@ class AdaptiveTemplateMatching:
         References:
             NumPy Developers. `numpy.ndarray`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
 
         # Update the template on all the datasets first before a final parse
         for dataKey in data_dict:

@@ -122,13 +122,13 @@ class SignalGraphWindow(QMainWindow):
             self.hs_file_name = f"{self.sub_file}/hs_manually_parsed_data.pkl"
             self.to_file_name = f"{self.sub_file}/to_manually_parsed_data.pkl"
             self.marking_time_file_name = f"{self.sub_file}/marking_time.npy"
-            self.check_files_exist()
-            self.open_file_dialogue()
-            self.load_pkl_file_data()
-            self.update_graph_data_forward()
+            self._check_files_exist()
+            self._open_file_dialogue()
+            self._load_pkl_file_data()
+            self._update_graph_data_forward()
 
         # Enable mouse clicking on the plot
-        self.graph_widget.scene().sigMouseClicked.connect(self.on_plot_click)
+        self.graph_widget.scene().sigMouseClicked.connect(self._on_plot_click)
 
         # Create buttons
         
@@ -137,24 +137,24 @@ class SignalGraphWindow(QMainWindow):
 
         self.hs_to_toggle_button = QPushButton("Heel Strike (yellow)")
         self.hs_to_toggle_button.setFont(self.font)
-        self.hs_to_toggle_button.clicked.connect(self.hs_to_toggle)
+        self.hs_to_toggle_button.clicked.connect(self._hs_to_toggle)
         button_layout.addWidget(self.hs_to_toggle_button)
 
         self.save_button = QPushButton("Save Indices")
         self.save_button.setFont(self.font)
-        self.save_button.clicked.connect(self.save_indices)
+        self.save_button.clicked.connect(self._save_indices)
         button_layout.addWidget(self.save_button)
 
         # Switch the data graph back to the previous data seen
         self.update_graph_backward_button = QPushButton("Go Backward to Next Data Section")
         self.update_graph_backward_button.setFont(self.font)
-        self.update_graph_backward_button.clicked.connect(self.change_data_to_mark_backward)
+        self.update_graph_backward_button.clicked.connect(self._change_data_to_mark_backward)
         button_layout.addWidget(self.update_graph_backward_button)
 
         # Switch the data graph back to the next data
         self.update_graph_forward_button = QPushButton("Go Forward to Next Data Section")
         self.update_graph_forward_button.setFont(self.font)
-        self.update_graph_forward_button.clicked.connect(self.change_data_to_mark_forward)
+        self.update_graph_forward_button.clicked.connect(self._change_data_to_mark_forward)
         button_layout.addWidget(self.update_graph_forward_button)  
 
         """Sets up the layout and widgets."""
@@ -168,12 +168,12 @@ class SignalGraphWindow(QMainWindow):
 
         # 2. Start Button
         self.start_button = QPushButton("Start Timer")
-        self.start_button.clicked.connect(self.start_timer)
+        self.start_button.clicked.connect(self._start_timer)
         button_layout.addWidget(self.start_button)
 
         # 3. Stop Button
         self.stop_button = QPushButton("Stop Timer")
-        self.stop_button.clicked.connect(self.stop_timer)
+        self.stop_button.clicked.connect(self._stop_timer)
         self.stop_button.setEnabled(False)  # Disabled until timer is started
         button_layout.addWidget(self.stop_button)
 
@@ -203,7 +203,7 @@ class SignalGraphWindow(QMainWindow):
         """
         # QTimer setup
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_time)
+        self.timer.timeout.connect(self._update_time)
         # Set the timeout interval (e.g., 1000 milliseconds = 1 second)
         self.timer_interval_ms = 1000
 
@@ -211,7 +211,7 @@ class SignalGraphWindow(QMainWindow):
         if self.counter == None:
             self.counter = 0
 
-    def start_timer(self):
+    def _start_timer(self):
         """Start the elapsed-time counter if it is not already running.
 
         Args:
@@ -230,7 +230,7 @@ class SignalGraphWindow(QMainWindow):
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
 
-    def stop_timer(self):
+    def _stop_timer(self):
         """Stop the elapsed-time counter if it is currently running.
 
         Args:
@@ -248,7 +248,7 @@ class SignalGraphWindow(QMainWindow):
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
 
-    def update_time(self):
+    def _update_time(self):
         """Increment the timer counter and refresh the on-screen clock.
 
         Args:
@@ -267,7 +267,7 @@ class SignalGraphWindow(QMainWindow):
         self.time_display = QTime(0, 0, 0).addSecs(self.counter).toString("hh:mm:ss")
         self.time_label.setText(self.time_display)
         
-    def check_files_exist(self):
+    def _check_files_exist(self):
         """Check for previously saved input and output files in the subfolder.
 
         Stores discovered paths for the pressure dictionary, saved heel-strike
@@ -303,7 +303,7 @@ class SignalGraphWindow(QMainWindow):
             print(f"{marking_time_file_path} exists in the current folder")
             self.marking_time_path = marking_time_file_path
 
-    def open_file_dialogue(self):
+    def _open_file_dialogue(self):
         """Prompt the user to choose a source data file when none was found.
 
         Args:
@@ -327,7 +327,7 @@ class SignalGraphWindow(QMainWindow):
             self.sub_file = file_name
 
     # Load data stored in pkl files for manual inflection point marking
-    def load_pkl_file_data(self):
+    def _load_pkl_file_data(self):
         """Load signal data and any existing saved labels from pickle files.
 
         Also restores the saved timer value when a marking-time file is present.
@@ -367,7 +367,7 @@ class SignalGraphWindow(QMainWindow):
             self.counter = np.load(self.marking_time_path)[0]
 
     # Update the graph to new data
-    def update_graph_data_forward(self):
+    def _update_graph_data_forward(self):
         """Advance to the next dataset and redraw the graph contents.
 
         When available, previously saved heel-strike and toe-off markers are
@@ -513,7 +513,7 @@ class SignalGraphWindow(QMainWindow):
         self.setWindowTitle("Manual Selection of Inflection Points " + currentKey + " " + str(self.keyIndex + 1) + "/" + str(len(self.dataKeys)))
         
     # Move to the next dataset to mark.    
-    def change_data_to_mark_forward(self):
+    def _change_data_to_mark_forward(self):
         """Save the current selections and move to the next dataset.
 
         Args:
@@ -523,12 +523,12 @@ class SignalGraphWindow(QMainWindow):
             None.
         """
         self.graph_widget.clear()
-        self.save_indices()
-        self.update_graph_data_forward()
+        self._save_indices()
+        self._update_graph_data_forward()
         
 
     # Move to the previous dataset to mark
-    def change_data_to_mark_backward(self):
+    def _change_data_to_mark_backward(self):
         """Save the current selections and move to the previous dataset.
 
         Args:
@@ -538,11 +538,11 @@ class SignalGraphWindow(QMainWindow):
             None.
         """
         self.graph_widget.clear()
-        self.save_indices()
+        self._save_indices()
         self.update_graph_data_backward()
 
     # Flow for methods when the graph is clicked.
-    def on_plot_click(self, event):
+    def _on_plot_click(self, event):
         """Handle plot clicks by adding or removing the nearest marker.
 
         Args:
@@ -638,7 +638,7 @@ class SignalGraphWindow(QMainWindow):
         return None
 
     # Clear all selections made on the graph.
-    def clear_selections(self):
+    def _clear_selections(self):
         """Remove all currently visible markers for the active label type.
 
         Args:
@@ -662,7 +662,7 @@ class SignalGraphWindow(QMainWindow):
             self.to_click_locations.clear()
             print("All selections cleared")
 
-    def hs_to_toggle(self):
+    def _hs_to_toggle(self):
         """Toggle the active marker type between heel strike and toe off.
 
         Args:
@@ -685,7 +685,7 @@ class SignalGraphWindow(QMainWindow):
             
 
     # Remove the last selection made.
-    def remove_last_selection(self):
+    def _remove_last_selection(self):
         """Remove the most recently added marker for the active label type.
 
         Args:
@@ -712,7 +712,7 @@ class SignalGraphWindow(QMainWindow):
                 print("No selections to remove")
 
     # Save the found indices
-    def save_indices(self):
+    def _save_indices(self):
         """Store the current selections in the in-memory save dictionaries.
 
         Args:
@@ -742,7 +742,7 @@ class SignalGraphWindow(QMainWindow):
         self.to_saved_indices = []
 
     # Pop up a message box to show what indices have been selected.
-    def show_hs_saved_indices(self):
+    def _show_hs_saved_indices(self):
         """Display the currently saved heel-strike indices in a message box.
 
         Args:
@@ -775,9 +775,9 @@ class SignalGraphWindow(QMainWindow):
             Qt Company. `QWidget.closeEvent` documentation.
         """
         # Stopping timer:
-        self.stop_timer()
+        self._stop_timer()
 
-        self.save_indices()
+        self._save_indices()
         if (len(self.savedHSInflPointDict.keys()) == 0 or self.dataKeys[self.keyIndex] not in self.savedHSInflPointDict.keys()):
             self.savedHSInflPointDict[self.dataKeys[self.keyIndex]] = self.hs_click_locations
 
