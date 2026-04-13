@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-template-matching"
+version = "0.1.0"
+description = "Adaptive template matching tools and manual inflection-point marking GUI for gait data workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary"}
+authors = [
+  {name = "Grange Simpson"},
+  {name = "Ivan Khimach"}
+]
+dependencies = [
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "PyQt5>=5.15; platform_system != 'Windows'",
+  "PySide6>=6.7; platform_system == 'Windows'",
+  "pyqtgraph>=0.13"
+]
+keywords = ["gait", "template-matching", "signal-processing", "gui", "biomechanics"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Medical Science Apps."
+]
+
+[project.urls]
+Homepage = "https://github.com/Garangatang/adaptive-template-matching-repo"
+Repository = "https://github.com/Garangatang/adaptive-template-matching-repo"
+
+[project.scripts]
+atm-manual-inflection-gui = "adaptive_template_matching.gui.manual_inflection_point_marking_gui:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
