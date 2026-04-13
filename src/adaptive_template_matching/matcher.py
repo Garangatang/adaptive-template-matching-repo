@@ -268,10 +268,6 @@ class AdaptiveTemplateMatching:
 
         Returns:
             None.
-
-        References:
-            Han, J., Kamber, M., and Pei, J. (2011). Data Mining: Concepts and
-            Techniques.
         """
         self.template = self._min_max_norm(self.template_save.astype(float))
         self.template = self.template * self.template_scaler
@@ -919,7 +915,7 @@ class AdaptiveTemplateMatching:
         """
         return self.template
 
-    def get_final_overlap_signal(self):
+    def get_final_idx_scores(self):
         """Return the final scores for each found index.
 
         Args:
@@ -929,3 +925,14 @@ class AdaptiveTemplateMatching:
             The final scores for found best overlap indices.
         """
         return self.found_indices_scores
+
+    def get_final_nsad_signal(self):
+        """Return the nsad signal generated from the template and given data signal
+
+        Args:
+            None.
+
+        Returns:
+            The final nsad signal after template updates.
+        """
+        return self.sad_history
