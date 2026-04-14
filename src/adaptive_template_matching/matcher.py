@@ -23,7 +23,7 @@ class AdaptiveTemplateMatching:
     4) For surviving candidates, compute Pearson r; require r ≥ `threshold`.
     5) Fit y = a*T + b and compute relative RMS error and flat-region RMS gate.
     6) Cluster-merge accepted indices within ±`cluster_radius` using metric
-       {'r','sad','sad_shifted'} to reduce near-duplicates.
+       {'r','nsad','nsad_shifted'} to reduce near-duplicates.
     7) Record SAD traces to `sad_history` for QC.
 
     Attributes
@@ -313,7 +313,7 @@ class AdaptiveTemplateMatching:
         plt.title(title + (" (raw z-scored)" if raw else ""))
         plt.grid(); plt.tight_layout(); plt.show()
 
-    def _plot_sad_legacy_visual(self, sad_vis: np.ndarray, title="−Σ|Δ|  (no shift)",
+    def _plot_nsad_legacy_visual(self, sad_vis: np.ndarray, title="−Σ|Δ|  (no shift)",
                                 figsize: tuple=(14, 2.8)):
         """ Plotting the sum absolute difference signal.
 
@@ -349,13 +349,13 @@ class AdaptiveTemplateMatching:
             mark_data: template best match marking indices.
             horiz_axis_line_inds: List of horizontal values to place on the plot at specified indices.
             vert_axis_line_inds: List of vertical values to place on the plot at specified indices.
-            plot_option: Gating for plots, can either be "sad_legacy", "matches", or "template_composite"
+            plot_option: Gating for plots, can either be "nsad_legacy", "matches", or "template_composite"
 
         References:
             Hunter, J. D. (2007). Matplotlib: A 2D Graphics Environment.
         """
         # Debug: panel 1
-        if plot_option == "sad_legacy":
+        if plot_option == "nsad_legacy":
             plt.figure(figsize=(12, 2.2))
             plt.plot(signal_data, lw=.8, c="k", alpha=.7, label="signal")
             for thresh in horiz_axis_line_inds: plt.axhline(thresh, c="purple", ls="--", lw=1, label=f"{int(label*100)}th pct")
@@ -397,7 +397,7 @@ class AdaptiveTemplateMatching:
                      low_amp_quantile=0.10,
                      low_amp_cover=0.60,
                      # clustering controls
-                     cluster_metric="sad",      # {"r","sad","sad_shifted"}
+                     cluster_metric="nsad",      # {"r","nsad","nsad_shifted"}
                      cluster_radius=None,       # None → defaults to win
                      show_debug=True,
                      debug_verbose=False):
@@ -415,7 +415,7 @@ class AdaptiveTemplateMatching:
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
             low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
-            cluster_metric: Metric used to merge nearby matches. Must be `"r"`, `"sad"`, or `"sad_shifted"`.
+            cluster_metric: Metric used to merge nearby matches. Must be `"r"`, `"nsad"`, or `"nsad_shifted"`.
             cluster_radius: Maximum distance between nearby matches before clustering; defaults to the template length.
             show_debug: Whether to show debugging plots.
             debug_verbose: Whether to print verbose scan diagnostics.
@@ -478,12 +478,12 @@ class AdaptiveTemplateMatching:
                                                                     idx_cand = idx_cand, rel_err= rel_err, threshold = threshold, first_half_err_thresh = flat_err_thresh)
         # Debug: panel 1
         if show_debug:
-            self._plot_sad_legacy_visual(sad_vis, title="−Σ|Δ|  (no shift)")
+            self._plot_nsad_legacy_visual(sad_vis, title="−Σ|Δ|  (no shift)")
 
             if enforce_low_amp:
                 self._debug_plots(signal_data = data, mark_data = accepted, horiz_axis_line_inds = [],
                                 vert_axis_line_inds = idx_cand, title = "Accepted After RMS Calculations", label = low_amp_quantile, 
-                                plot_option = "sad_legacy")
+                                plot_option = "nsad_legacy")
 
         # Cluster merge 
         if accepted.size > 1:
@@ -493,15 +493,15 @@ class AdaptiveTemplateMatching:
 
             if cluster_metric == "r":
                 metric_seq = r_sort
-            elif cluster_metric == "sad":
+            elif cluster_metric == "nsad":
                 metric_seq = nsad[acc_sort]
-            elif cluster_metric == "sad_shifted":
+            elif cluster_metric == "nsad_shifted":
                 tmp = nsad.copy()
                 if acc_sort.size:
                     tmp[acc_sort] = tmp[acc_sort] #+ pos_shift
                 metric_seq = tmp[acc_sort]
             else:
-                raise ValueError("cluster_metric must be 'r', 'sad', or 'sad_shifted'.")
+                raise ValueError("cluster_metric must be 'r', 'nsad', or 'nsad_shifted'.")
 
             keep = []
             k = 0
@@ -558,7 +558,7 @@ class AdaptiveTemplateMatching:
                                   low_amp_quantile=0.10,
                                   low_amp_cover=0.60,
                                   # NEW:
-                                  cluster_metric="sad",
+                                  cluster_metric="nsad",
                                   cluster_radius=None,
                                   show_debug=True):
         """Run a one-shot scan, summarize the results, and optionally plot them.
@@ -634,7 +634,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile=0.10,
                     low_amp_cover=0.60,
                     # :
-                    cluster_metric="sad",
+                    cluster_metric="nsad",
                     cluster_radius=None,
                     show_debug=True, debug_verbose=False):
         """Run iterative template adaptation on a dataset and return final matches.
@@ -706,7 +706,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=False, debug_verbose: bool=False):
         """Run the dataset pipeline by _resetting the template to the starting piecewise linear function before each dataset.
@@ -762,7 +762,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=True, debug_verbose: bool=False):
         """Warm-start the template on one dataset, then evaluate all datasets.
@@ -839,7 +839,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=True, debug_verbose: bool=False):
         """Adapt the template across all datasets, then rerun matching on all datasets.
