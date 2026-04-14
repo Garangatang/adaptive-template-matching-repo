@@ -5,7 +5,6 @@ import random
 
 """
 Written by Grange Simpson and Ivan Khimach
-Version: 2026.04.11
 
 References:
     NumPy Developers. `numpy.lib.stride_tricks.sliding_window_view`.

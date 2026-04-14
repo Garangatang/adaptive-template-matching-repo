@@ -19,6 +19,7 @@ if SYSTEM_NAME == "Windows":
         QPushButton,
         QMessageBox,
         QFileDialog,
+        QInputDialog,
         QLabel,
     )
     from PySide6.QtGui import QFont
@@ -33,6 +34,7 @@ elif SYSTEM_NAME == "Darwin":
         QPushButton,
         QMessageBox,
         QFileDialog,
+        QInputDialog,
         QLabel,
     )
     from PyQt5.QtGui import QFont
@@ -47,10 +49,15 @@ else:
         QPushButton,
         QMessageBox,
         QFileDialog,
+        QInputDialog,
         QLabel,
     )
     from PyQt5.QtGui import QFont
     from PyQt5.QtCore import QTimer, QTime, Qt
+
+"""
+Written by Grange Simpson
+"""
 
 class SignalGraphWindow(QMainWindow):
     def __init__(self):
@@ -105,8 +112,9 @@ class SignalGraphWindow(QMainWindow):
         self.y = None
         self.keyIndex = None
         self.dataKeys = None
-        self.upSampleVal = int(1980/33)
-        self.dataLength = 1300*self.upSampleVal
+        #self.sample_rate = 60.0
+        self.upSampleVal = 0
+        self.dataLength = 0
 
         # Value to toggle between heel strike and toe off
         self.inflMarker = "Heel Strike"
@@ -118,7 +126,7 @@ class SignalGraphWindow(QMainWindow):
             self.to_file_path = None
             self.marking_time_path = None
             self.counter = None
-            self.sub_file = "GT_GUI_Parsing"
+            self.sub_file = "."
             self.hs_file_name = f"{self.sub_file}/hs_manually_parsed_data.pkl"
             self.to_file_name = f"{self.sub_file}/to_manually_parsed_data.pkl"
             self.marking_time_file_name = f"{self.sub_file}/marking_time.npy"
@@ -389,9 +397,9 @@ class SignalGraphWindow(QMainWindow):
                 self.keyIndex = len(inflPointKeys) - 1
 
                 # Set up the 
-                self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]), 
-                                    len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]))
-                self.y = self.normPressDict[self.dataKeys[self.keyIndex]][self.normPressDict[self.dataKeys[self.keyIndex]].columns[0]].iloc[0:self.dataLength].to_numpy()
+                self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]]), 
+                                    len(self.normPressDict[self.dataKeys[self.keyIndex]]))
+                self.y = self.normPressDict[self.dataKeys[self.keyIndex]]
                 pen = pg.mkPen(color='m', width=3)
                 self.plot = self.graph_widget.plot(self.x, self.y, pen = pen)
 
@@ -420,18 +428,18 @@ class SignalGraphWindow(QMainWindow):
             else:                         
                 self.keyIndex = 0
                 # Set up the 
-                self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]), 
-                                    len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]))
-                self.y = self.normPressDict[self.dataKeys[self.keyIndex]][self.normPressDict[self.dataKeys[self.keyIndex]].columns[0]].iloc[0:self.dataLength].to_numpy()
+                self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]]), 
+                                    len(self.normPressDict[self.dataKeys[self.keyIndex]]))
+                self.y = self.normPressDict[self.dataKeys[self.keyIndex]]
 
                 pen = pg.mkPen(color='m', width=3)
                 self.plot = self.graph_widget.plot(self.x, self.y, pen = pen)
 
         elif (self.normPressDict != None and self.keyIndex < len(self.dataKeys) - 1):
             self.keyIndex += 1
-            self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]), 
-                                 len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]))
-            self.y = self.normPressDict[self.dataKeys[self.keyIndex]][self.normPressDict[self.dataKeys[self.keyIndex]].columns[0]].iloc[0:self.dataLength].to_numpy()
+            self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]]), 
+                                 len(self.normPressDict[self.dataKeys[self.keyIndex]]))
+            self.y = self.normPressDict[self.dataKeys[self.keyIndex]]
             # Showing previously clicked points if navigating backward.
             pen = pg.mkPen(color='m', width=3)
             self.plot = self.graph_widget.plot(self.x, self.y, pen = pen)
@@ -481,8 +489,8 @@ class SignalGraphWindow(QMainWindow):
             
         if (self.normPressDict != None and self.keyIndex != 0):
             self.keyIndex -= 1
-            self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]), len(self.normPressDict[self.dataKeys[self.keyIndex]].iloc[0:self.dataLength]))
-            self.y = self.normPressDict[self.dataKeys[self.keyIndex]][self.normPressDict[self.dataKeys[self.keyIndex]].columns[0]].iloc[0:self.dataLength].to_numpy()
+            self.x = np.linspace(0, len(self.normPressDict[self.dataKeys[self.keyIndex]]), len(self.normPressDict[self.dataKeys[self.keyIndex]]))
+            self.y = self.normPressDict[self.dataKeys[self.keyIndex]]
             pen = pg.mkPen(color='m', width=3)
             self.plot = self.graph_widget.plot(self.x, self.y, pen = pen)
 
@@ -567,7 +575,7 @@ class SignalGraphWindow(QMainWindow):
                     x, y = self.x[index], self.y[index]
                     minLastClickedPointDist = np.abs(self.hs_click_locations - index)
                     # Clearing point if click is near another previously selected point
-                    if (len(minLastClickedPointDist) > 0 and min(minLastClickedPointDist) < 15*self.upSampleVal):
+                    if (len(minLastClickedPointDist) > 0 and min(minLastClickedPointDist) < (len(self.y) / 500)):
                         minLocation = np.array(minLastClickedPointDist).argmin()
                         #print("hs_Markers")
                         #print(self.hs_markers)
@@ -597,7 +605,7 @@ class SignalGraphWindow(QMainWindow):
                 x, y = self.x[index], self.y[index]
                 minLastClickedPointDist = np.abs(self.to_click_locations - index)
                 # Clearing point if click is near another previously selected point
-                if (len(minLastClickedPointDist) > 0 and min(minLastClickedPointDist) < 15*self.upSampleVal):
+                if (len(minLastClickedPointDist) > 0 and min(minLastClickedPointDist) < (len(self.y) / 500)):
                     minLocation = np.array(minLastClickedPointDist).argmin()
                     #print("hs_Markers")
                     #print(self.hs_markers)
