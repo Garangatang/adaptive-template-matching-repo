@@ -743,6 +743,7 @@ class AdaptiveTemplateMatching:
 
         return_dict = {}
         for dataKey in data_dict:
+            print(dataKey)
             return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
@@ -807,6 +808,7 @@ class AdaptiveTemplateMatching:
             datasetToTrain = random.choice(list(data_dict.keys()))
 
         # Update the template on the selected dataset
+        print(f"Updating template on {datasetToTrain}")
         self._run_dataset(data_dict[datasetToTrain], datasetToTrain,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
@@ -824,6 +826,7 @@ class AdaptiveTemplateMatching:
         return_dict = {}
 
         for dataKey in data_dict:
+            print(dataKey)
             return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
@@ -882,6 +885,7 @@ class AdaptiveTemplateMatching:
         self.final_scores_dict = {}
 
         # Update the template on all the datasets first before a final parse
+        print("Updating template across all datasets")
         for dataKey in data_dict:
             self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
