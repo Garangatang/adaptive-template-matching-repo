@@ -17,7 +17,7 @@ The template also can be adapted to other sensor signals, but has not been fully
 For development from a cloned GitHub repository:
 
 ```bash
-pip install -e git+https://github.com/Garangatang/adaptive-template-matching-repo/tree/main
+pip install git+git+https://github.com/Garangatang/adaptive-template-matching-repo
 ```
 
 Qt GUI dependency selection is platform-aware during installation:
