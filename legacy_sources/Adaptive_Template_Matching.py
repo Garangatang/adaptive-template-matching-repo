@@ -5,7 +5,6 @@ import random
 
 """
 Written by Grange Simpson and Ivan Khimach
-Version: 2026.04.11
 
 References:
     NumPy Developers. `numpy.lib.stride_tricks.sliding_window_view`.
@@ -24,20 +23,20 @@ class AdaptiveTemplateMatching:
     4) For surviving candidates, compute Pearson r; require r ≥ `threshold`.
     5) Fit y = a*T + b and compute relative RMS error and flat-region RMS gate.
     6) Cluster-merge accepted indices within ±`cluster_radius` using metric
-       {'r','sad','sad_shifted'} to reduce near-duplicates.
-    7) Record SAD traces to `sad_history` for QC.
+       {'r','nsad','nsad_shifted'} to reduce near-duplicates.
+    7) Record SAD traces to `nsad_history` for QC.
 
     Attributes
     ----------
     template : np.ndarray (z-scored)
     win : int
         Template window length.
-    sad_history : list[np.ndarray]
+    nsad_history : list[np.ndarray]
         SAD traces per scan for diagnostics.
 
     Update rule
     -----------
-    `update_template` averages ALL accepted z-scored windows, then z-scores again.
+    `_update_template` averages ALL accepted z-scored windows, then z-scores again.
 
     References:
         NumPy Developers. `numpy.lib.stride_tricks.sliding_window_view`.
@@ -60,19 +59,21 @@ class AdaptiveTemplateMatching:
             Slope of the line needed to create the line at the given angle.
         """
         self.template_scaler = template_scaler
-        self.template = self.make_dual_angle_template(template_angls, cp_inds, template_len, 
+        self.template = self._make_dual_angle_template(template_angls, cp_inds, template_len, 
                                                 baseline)
         
         # Flipping the template if wanted, say for marking toe-off rather than heel-strike.
         if reflect:
             self.template = self.template[::-1]
 
-        # Save of starting template shape to be used when resetting the template between datasets.
+        # Save of starting template shape to be used when _resetting the template between datasets.
         self.template_save = self.template.copy()
 
         # Normalizing template shape and initializing other global variables.
-        self.reset()
-        self.found_indices_scores = np.array([])
+        self._reset()
+        self.nsad_history_dict = {}
+        self.template_history_dict = {}
+        self.final_scores_dict = {}
 
     # ===== Template construction ======================================================
     def _angle_to_slope(self, angle_deg):
@@ -86,7 +87,7 @@ class AdaptiveTemplateMatching:
         """
         return np.tan(np.deg2rad(angle_deg))
     
-    def make_dual_angle_template(self, angle_degr_arr: list, 
+    def _make_dual_angle_template(self, angle_degr_arr: list, 
                                 change_points_arr: list,
                                 template_length: int=200,
                                 baseline: float = 0.0):
@@ -104,7 +105,6 @@ class AdaptiveTemplateMatching:
         for cp in change_points_arr:
             if cp > template_length:
                 raise ValueError(f"Change point {cp} not in range (0, {template_length}]")
-                return
 
         # 1. Convert degrees to slopes and apply the direction multiplier
         slopes = [self._angle_to_slope(a) for a in angle_degr_arr]
@@ -260,24 +260,19 @@ class AdaptiveTemplateMatching:
         rng = x.max() - x.min()
         return (x - x.min()) / (rng + 1e-12)
 
-    def reset(self):
-        """ Reset the template shape to the initial basic shape if starting on a new dataset.
+    def _reset(self):
+        """ _Reset the template shape to the initial basic shape if starting on a new dataset.
 
         Args:
             None.
 
         Returns:
             None.
-
-        References:
-            Han, J., Kamber, M., and Pei, J. (2011). Data Mining: Concepts and
-            Techniques.
         """
         self.template = self._min_max_norm(self.template_save.astype(float))
         self.template = self.template * self.template_scaler
-        self.template_history = [self.template.copy()]
         self.win = len(self.template)
-        self.sad_history = []      
+        self.nsad_history = []      
         self.last_nsad = None   # last backend z-space SAD
 
     # --- visualization-only helpers (do NOT affect backend / gating) -------------------------
@@ -318,7 +313,7 @@ class AdaptiveTemplateMatching:
         plt.title(title + (" (raw z-scored)" if raw else ""))
         plt.grid(); plt.tight_layout(); plt.show()
 
-    def _plot_sad_legacy_visual(self, sad_vis: np.ndarray, title="−Σ|Δ|  (no shift)",
+    def _plot_nsad_legacy_visual(self, sad_vis: np.ndarray, title="−Σ|Δ|  (no shift)",
                                 figsize: tuple=(14, 2.8)):
         """ Plotting the sum absolute difference signal.
 
@@ -354,13 +349,13 @@ class AdaptiveTemplateMatching:
             mark_data: template best match marking indices.
             horiz_axis_line_inds: List of horizontal values to place on the plot at specified indices.
             vert_axis_line_inds: List of vertical values to place on the plot at specified indices.
-            plot_option: Gating for plots, can either be "sad_legacy", "matches", or "template_composite"
+            plot_option: Gating for plots, can either be "nsad_legacy", "matches", or "template_composite"
 
         References:
             Hunter, J. D. (2007). Matplotlib: A 2D Graphics Environment.
         """
         # Debug: panel 1
-        if plot_option == "sad_legacy":
+        if plot_option == "nsad_legacy":
             plt.figure(figsize=(12, 2.2))
             plt.plot(signal_data, lw=.8, c="k", alpha=.7, label="signal")
             for thresh in horiz_axis_line_inds: plt.axhline(thresh, c="purple", ls="--", lw=1, label=f"{int(label*100)}th pct")
@@ -389,7 +384,7 @@ class AdaptiveTemplateMatching:
 
 
     # --- Core template matching algorithm functions-------------------------
-    def scan_matches(self, data,
+    def _scan_matches(self, data,
                      threshold,
                      amp_max,
                      rel_err,
@@ -402,7 +397,7 @@ class AdaptiveTemplateMatching:
                      low_amp_quantile=0.10,
                      low_amp_cover=0.60,
                      # clustering controls
-                     cluster_metric="sad",      # {"r","sad","sad_shifted"}
+                     cluster_metric="nsad",      # {"r","nsad","nsad_shifted"}
                      cluster_radius=None,       # None → defaults to win
                      show_debug=True,
                      debug_verbose=False):
@@ -420,7 +415,7 @@ class AdaptiveTemplateMatching:
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
             low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
-            cluster_metric: Metric used to merge nearby matches. Must be `"r"`, `"sad"`, or `"sad_shifted"`.
+            cluster_metric: Metric used to merge nearby matches. Must be `"r"`, `"nsad"`, or `"nsad_shifted"`.
             cluster_radius: Maximum distance between nearby matches before clustering; defaults to the template length.
             show_debug: Whether to show debugging plots.
             debug_verbose: Whether to print verbose scan diagnostics.
@@ -459,7 +454,7 @@ class AdaptiveTemplateMatching:
         nsad = -np.sum(np.abs(win_norm - self.template), axis=1) + pos_shift
         #nsad = -np.sum(np.abs(win_mat - self.template), axis=1)
         self.last_nsad = nsad
-        self.sad_history.append(nsad.copy())
+        self.nsad_history.append(nsad.copy())
 
         # Optional low-amp gate
         if enforce_low_amp:
@@ -483,12 +478,12 @@ class AdaptiveTemplateMatching:
                                                                     idx_cand = idx_cand, rel_err= rel_err, threshold = threshold, first_half_err_thresh = flat_err_thresh)
         # Debug: panel 1
         if show_debug:
-            self._plot_sad_legacy_visual(sad_vis, title="−Σ|Δ|  (no shift)")
+            self._plot_nsad_legacy_visual(sad_vis, title="−Σ|Δ|  (no shift)")
 
             if enforce_low_amp:
                 self._debug_plots(signal_data = data, mark_data = accepted, horiz_axis_line_inds = [],
                                 vert_axis_line_inds = idx_cand, title = "Accepted After RMS Calculations", label = low_amp_quantile, 
-                                plot_option = "sad_legacy")
+                                plot_option = "nsad_legacy")
 
         # Cluster merge 
         if accepted.size > 1:
@@ -498,15 +493,15 @@ class AdaptiveTemplateMatching:
 
             if cluster_metric == "r":
                 metric_seq = r_sort
-            elif cluster_metric == "sad":
+            elif cluster_metric == "nsad":
                 metric_seq = nsad[acc_sort]
-            elif cluster_metric == "sad_shifted":
+            elif cluster_metric == "nsad_shifted":
                 tmp = nsad.copy()
                 if acc_sort.size:
                     tmp[acc_sort] = tmp[acc_sort] #+ pos_shift
                 metric_seq = tmp[acc_sort]
             else:
-                raise ValueError("cluster_metric must be 'r', 'sad', or 'sad_shifted'.")
+                raise ValueError("cluster_metric must be 'r', 'nsad', or 'nsad_shifted'.")
 
             keep = []
             k = 0
@@ -527,7 +522,7 @@ class AdaptiveTemplateMatching:
 
         return accepted, scores
 
-    def update_template(self, data: np.ndarray, match_idx: np.ndarray, show_debug: bool=True):
+    def _update_template(self, data: np.ndarray, match_idx: np.ndarray, show_debug: bool=True):
         """ Update the template shape using data from accepted indices.
 
         Args:
@@ -546,7 +541,7 @@ class AdaptiveTemplateMatching:
         segs = [self._min_max_norm(data[int(i - w / 2):int(i + w / 2)]) for i in match_idx]
         self.template = np.mean(segs, axis = 0)
         self.template = self.template * self.template_scaler
-        self.template_history.append(self.template.copy())
+        #self.template_history.append(self.template.copy())
 
         if show_debug:
             self._debug_plots(signal_data = segs, mark_data = np.array([]), horiz_axis_line_inds = [], vert_axis_line_inds = [],
@@ -554,7 +549,7 @@ class AdaptiveTemplateMatching:
                             plot_option = "template_composite")
 
 
-    def final_template_match_and_plot(self, name, data,
+    def _final_template_match_and_plot(self, name, data,
                                   threshold, amp_max,
                                   pos_shift, sad_thresh,
                                   min_std=1e-3,
@@ -563,9 +558,10 @@ class AdaptiveTemplateMatching:
                                   low_amp_quantile=0.10,
                                   low_amp_cover=0.60,
                                   # NEW:
-                                  cluster_metric="sad",
+                                  cluster_metric="nsad",
                                   cluster_radius=None,
-                                  show_debug=True):
+                                  show_debug=True,
+                                  debug_verbose=True):
         """Run a one-shot scan, summarize the results, and optionally plot them.
 
         Args:
@@ -593,7 +589,7 @@ class AdaptiveTemplateMatching:
         """
 
         # Scanning data with template for matches
-        idx, sco = self.scan_matches(
+        idx, sco = self._scan_matches(
             data,
             threshold,
             amp_max,
@@ -609,7 +605,7 @@ class AdaptiveTemplateMatching:
             cluster_radius=cluster_radius,
             # ↑↑↑
             show_debug=show_debug,
-            debug_verbose=False
+            debug_verbose=debug_verbose
         )
 
         if show_debug:
@@ -639,7 +635,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile=0.10,
                     low_amp_cover=0.60,
                     # :
-                    cluster_metric="sad",
+                    cluster_metric="nsad",
                     cluster_radius=None,
                     show_debug=True, debug_verbose=False):
         """Run iterative template adaptation on a dataset and return final matches.
@@ -672,7 +668,7 @@ class AdaptiveTemplateMatching:
         for p in range(passes):
             if debug_verbose:
                 print(f"   pass {p+1}/{passes}")
-            idx, _ = self.scan_matches(
+            idx, _ = self._scan_matches(
                 data, thr, amp_max, rel_err,
                 pos_shift=pos_shift,
                 sad_thresh=sad_thresh,
@@ -687,10 +683,10 @@ class AdaptiveTemplateMatching:
                 show_debug=show_debug,
                 debug_verbose=debug_verbose
             )
-            self.update_template(data, idx, show_debug=show_debug)
+            self._update_template(data, idx, show_debug=show_debug)
         
         # Final pass of the refined template
-        final_marked_indices, final_marked_indices_scores = self.final_template_match_and_plot(
+        final_marked_indices, final_marked_indices_scores = self._final_template_match_and_plot(
             name, data, thr, amp_max,
             pos_shift, sad_thresh, min_std, rel_err,
             enforce_low_amp, low_amp_quantile, low_amp_cover,
@@ -698,10 +694,11 @@ class AdaptiveTemplateMatching:
             cluster_metric=cluster_metric,
             cluster_radius=cluster_radius,
             # ↑↑↑
-            show_debug=show_debug
+            show_debug=show_debug,
+            debug_verbose=debug_verbose
         )
-        self.found_indices_scores = final_marked_indices_scores
-        return final_marked_indices
+        
+        return final_marked_indices, final_marked_indices_scores
 
     
     def cold_start_run_dataset(self, data_dict: dict,
@@ -711,10 +708,10 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=False, debug_verbose: bool=False):
-        """Run the dataset pipeline by resetting the template to the starting piecewise linear function before each dataset.
+        """Run the dataset pipeline by _resetting the template to the starting piecewise linear function before each dataset.
 
         Args:
             data_dict: Mapping of dataset names to input signal arrays.
@@ -739,12 +736,15 @@ class AdaptiveTemplateMatching:
         References:
             NumPy Developers. `numpy.ndarray`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
+        self.template_history_dict = {}
+        self.final_scores_dict = {}
 
         return_dict = {}
         for dataKey in data_dict:
-            return_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
+            print(dataKey)
+            return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
@@ -753,11 +753,12 @@ class AdaptiveTemplateMatching:
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
-                    show_debug=show_debug, debug_verbose=show_debug
+                    show_debug=show_debug, debug_verbose=debug_verbose
             )
+            # Saving final parsing template shapes and scores
+            self.template_history_dict[dataKey] = self.template
 
-            self.reset()
-
+            self._reset()
         return return_dict
 
     def warm_start_run_dataset(self, data_dict: dict, name: str,
@@ -767,7 +768,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=True, debug_verbose: bool=False):
         """Warm-start the template on one dataset, then evaluate all datasets.
@@ -796,8 +797,10 @@ class AdaptiveTemplateMatching:
         References:
             Python Software Foundation. `random.choice`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
+        self.template_history_dict = {}
+        self.final_scores_dict = {}
 
         datasetToTrain = name
         # Choose a random dataset to adapt the template on
@@ -805,6 +808,7 @@ class AdaptiveTemplateMatching:
             datasetToTrain = random.choice(list(data_dict.keys()))
 
         # Update the template on the selected dataset
+        print(f"Updating template on {datasetToTrain}")
         self._run_dataset(data_dict[datasetToTrain], datasetToTrain,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
@@ -814,7 +818,7 @@ class AdaptiveTemplateMatching:
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
-                    show_debug=show_debug, debug_verbose=show_debug
+                    show_debug=show_debug, debug_verbose=debug_verbose
             )
 
         # Don't perform any more updates
@@ -822,7 +826,8 @@ class AdaptiveTemplateMatching:
         return_dict = {}
 
         for dataKey in data_dict:
-            return_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
+            print(dataKey)
+            return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
@@ -831,8 +836,10 @@ class AdaptiveTemplateMatching:
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
-                    show_debug=show_debug, debug_verbose=show_debug
+                    show_debug=show_debug, debug_verbose=debug_verbose
             )
+            # Saving final parsing template shapes and scores
+            self.template_history_dict[dataKey] = self.template
 
         return return_dict
 
@@ -844,7 +851,7 @@ class AdaptiveTemplateMatching:
                     low_amp_quantile: float=0.10,
                     low_amp_cover: float=0.60,
                     # :
-                    cluster_metric: str="sad",
+                    cluster_metric: str="nsad",
                     cluster_radius: int=None,
                     show_debug: bool=True, debug_verbose: bool=False):
         """Adapt the template across all datasets, then rerun matching on all datasets.
@@ -872,12 +879,15 @@ class AdaptiveTemplateMatching:
         References:
             NumPy Developers. `numpy.ndarray`.
         """
-        # Reset template shape in case new class instance isn't used for a new run.
-        self.reset()
+        # _Reset template shape in case new class instance isn't used for a new run.
+        self._reset()
+        self.template_history_dict = {}
+        self.final_scores_dict = {}
 
         # Update the template on all the datasets first before a final parse
+        print("Updating template across all datasets")
         for dataKey in data_dict:
-           self._run_dataset(data_dict[dataKey], dataKey,
+            self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
@@ -886,15 +896,17 @@ class AdaptiveTemplateMatching:
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
-                    show_debug=show_debug, debug_verbose=show_debug
+                    show_debug=show_debug, debug_verbose=debug_verbose
             )
+            self.nsad_history = []
+            self.template_history_dict[dataKey] = self.template
 
         # Don't perform any more updates, use the template updated across all datasets
         passes = 0
         return_dict = {}
 
         for dataKey in data_dict:
-            return_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
+            return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, thr, rel_err, passes,
                     pos_shift, sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
@@ -903,29 +915,43 @@ class AdaptiveTemplateMatching:
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
-                    show_debug=show_debug, debug_verbose=show_debug
+                    show_debug=show_debug, debug_verbose=debug_verbose
             )
-
+            self.nsad_history_dict[dataKey] = self.nsad_history
+            self.nsad_history = []
         return return_dict
 
-    def get_template_shape(self):
-        """Return the current template shape as a NumPy array.
+    def get_final_nsad_signal_dict(self):
+        """Return the nsad signal generated from the template and given data signal
 
         Args:
             None.
 
         Returns:
-            The current template shape.
+            The final nsad signal after template updates.
         """
-        return self.template
-
-    def get_final_overlap_signal(self):
-        """Return the final scores for each found index.
+        return self.nsad_history_dict
+    
+    def get_final_ind_scores_dict(self):
+        """Return the final scores of each found inflection point index after the final pass organized by dataset from the input dictionary
 
         Args:
             None.
 
         Returns:
-            The final scores for found best overlap indices.
+            The the final scores dict
         """
-        return self.found_indices_scores
+        return self.final_scores_dict
+    
+    def get_template_history_dict(self):
+        """Return the template shape history across each dataset organized by dataset from the input dictionary.
+
+        Args:
+            None.
+
+        Returns:
+            The the template history dict
+        """
+        return self.template_history_dict
+    
+
