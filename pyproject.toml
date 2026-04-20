@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Adaptive template matching tools and manual inflection-point marking GUI for gait data workflows."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Proprietary"}
+license = "MIT"
 authors = [
   {name = "Grange Simpson"},
   {name = "Ivan Khimach"}
@@ -25,7 +25,7 @@ keywords = ["gait", "template-matching", "signal-processing", "gui", "biomechani
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "License :: Other/Proprietary License",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering",
   "Topic :: Scientific/Engineering :: Medical Science Apps."
