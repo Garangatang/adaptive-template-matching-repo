@@ -44,7 +44,7 @@ class AdaptiveTemplateMatching:
         two parents.
     """
     def __init__(self, cp_inds: list = [145, 195], template_angls: list = [80, 88], 
-                template_len: int = 200, baseline: float = 0.0, template_scaler: float = 0.12, 
+                template_len: int = 200, baseline: float = 0.0, 
                 reflect: bool = False):
         """Convert the given angle in degrees to a slope. A slope < 90° will be positive, a slope > 90° will be negative.
 
@@ -53,12 +53,11 @@ class AdaptiveTemplateMatching:
             template_angls: Angles to be used in creating the change in slope between the given change points.
             template_len: Wanted length of the template.
             baseline: Starting value used when constructing the initial template.
-            template_scaler: Scale factor applied to the normalized template shape.
             reflect: Reflect the template about the y-axis, such as for marking toe-off rather than heel-strike.
         Returns:
             Slope of the line needed to create the line at the given angle.
         """
-        self.template_scaler = template_scaler
+        self.template_scaler = 0
         self.template = self._make_dual_angle_template(template_angls, cp_inds, template_len, 
                                                 baseline)
         
@@ -175,14 +174,13 @@ class AdaptiveTemplateMatching:
         return numerator / (windows_norm * template_norm)
 
     def _matrix_accepted_inds_rms_calculations(self, pearson_corr_arr: np.ndarray, norm_data: np.ndarray, 
-                                                idx_cand:np.ndarray, rel_err: float, threshold: float, first_half_err_thresh: float):
+                                                idx_cand:np.ndarray, rel_err: float, first_half_err_thresh: float):
         """ RMS calculations between template and data around accepted indices after _rolling_window_correlation 
 
         Args:
             pearson_corr_arr: Output from _rolling_window_correlation.
             norm_data: Normalized windowed data.
             idx_cand: Candidates indices for highest match with template after passing filters.
-            threshold: threshold for pearson correlation value.
             first_half_err_thresh: threshold for pearson rms correlation of first half of the template.
         Returns:
             accepted, scores: The accepted indices after rms calculations against the template, and rms scores.
@@ -192,6 +190,7 @@ class AdaptiveTemplateMatching:
             NumPy Developers. `numpy.linalg.pinv`.
         """
         # Filter pearson_corr_arr and idx_cand based on the threshold
+        threshold = 0.6
         mask_initial = pearson_corr_arr >= threshold
         idx_filtered = idx_cand[mask_initial]
         scores_filtered = pearson_corr_arr[mask_initial]
@@ -234,7 +233,7 @@ class AdaptiveTemplateMatching:
         half_w = W // 2
         rms_flat_vals = np.sqrt(diff_sq[:, :half_w].mean(axis=1))
 
-        final_keep = (rel_rms_vals <= rel_err) & (rms_flat_vals <= first_half_err_thresh)
+        final_keep = (rel_rms_vals <= rel_err) #& (rms_flat_vals <= first_half_err_thresh)
 
         accepted = idx_filtered[final_keep].tolist()
         scores = scores_filtered[final_keep].tolist()
@@ -270,7 +269,7 @@ class AdaptiveTemplateMatching:
             None.
         """
         self.template = self._min_max_norm(self.template_save.astype(float))
-        self.template = self.template * self.template_scaler
+        self.template = self.template #* 0.1
         self.win = len(self.template)
         self.nsad_history = []      
         self.last_nsad = None   # last backend z-space SAD
@@ -307,13 +306,13 @@ class AdaptiveTemplateMatching:
         References:
             Hunter, J. D. (2007). Matplotlib: A 2D Graphics Environment.
         """
-        data = self.template if raw else self._min_max_norm(self.template)
+        data = self.template #if raw else self._min_max_norm(self.template)
         plt.figure(figsize=(8, 3))
         plt.plot(data, c="purple")
         plt.title(title + (" (raw z-scored)" if raw else ""))
         plt.grid(); plt.tight_layout(); plt.show()
 
-    def _plot_nsad_legacy_visual(self, sad_vis: np.ndarray, title="−Σ|Δ|  (no shift)",
+    def _plot_nsad_legacy_visual(self, sad_vis: np.ndarray, threshold: float,  title="−Σ|Δ|  (no shift)",
                                 figsize: tuple=(14, 2.8)):
         """ Plotting the sum absolute difference signal.
 
@@ -333,7 +332,7 @@ class AdaptiveTemplateMatching:
 
         plt.figure(figsize=figsize)
         plt.plot(y, lw=1.25, label="−Σ|Δ| (legacy, smoothed)")
-        plt.axhline(-0.5, c="red", ls="--", lw=1.0, label="threshold = -0.5")
+        plt.axhline(threshold, c="red", ls="--", lw=1.0, label=f"threshold = {threshold}")
         #plt.ylim(y_min - pad_bottom, y_max + 0.02 * max(1.0, abs(y_max)))
         plt.ylim(y_min - pad_bottom, y_max + pad_top)
         plt.title(title)
@@ -368,7 +367,7 @@ class AdaptiveTemplateMatching:
         if plot_option == "matches":
             w = self.win
             plt.figure(figsize=(12, 4))
-            plt.plot(self._min_max_norm(signal_data), c="black", alpha=.8)
+            plt.plot(signal_data, c="black", alpha=.8)
             for i in vert_axis_line_inds: plt.axvspan(i, i+w-1, color="royalblue", alpha=.25)
             plt.title(f"{title}  final matches (n={len(mark_data)})")
             plt.grid(); plt.tight_layout(); plt.show()
@@ -378,24 +377,21 @@ class AdaptiveTemplateMatching:
             draw_segs = signal_data if len(signal_data) <= 200 else signal_data[:200]
             for s in draw_segs:
                 plt.plot(s, c="grey", alpha=0.25)
-            plt.plot(self._min_max_norm(self.template), c="blue", lw=2, label=f"{label}")
+            plt.plot(self.template, c="blue", lw=2, label=f"{label}")
             plt.title(f"{title}")
             plt.grid(); plt.legend(); plt.tight_layout(); plt.show()
 
 
     # --- Core template matching algorithm functions-------------------------
     def _scan_matches(self, data,
-                     threshold,
                      amp_max,
                      rel_err,
                      flat_err_thresh=0.15,
-                     pos_shift=20,
                      sad_thresh=0,
                      min_std=1e-3,
                      # low-amplitude gating
                      enforce_low_amp=True,
                      low_amp_quantile=0.10,
-                     low_amp_cover=0.60,
                      # clustering controls
                      cluster_metric="nsad",      # {"r","nsad","nsad_shifted"}
                      cluster_radius=None,       # None → defaults to win
@@ -405,16 +401,13 @@ class AdaptiveTemplateMatching:
 
         Args:
             data: Input signal to scan.
-            threshold: Minimum Pearson correlation required for a candidate.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
             rel_err: Maximum allowed relative RMS error after template fitting.
             flat_err_thresh: Maximum allowed RMS error in the first half of the window.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches. Must be `"r"`, `"nsad"`, or `"nsad_shifted"`.
             cluster_radius: Maximum distance between nearby matches before clustering; defaults to the template length.
             show_debug: Whether to show debugging plots.
@@ -448,10 +441,14 @@ class AdaptiveTemplateMatching:
         std_ok   = (win_std.squeeze() >= min_std)
         #win_norm = (win_mat - win_mean) / win_std
         #win_norm = self._zscore(win_mat)
-        win_norm = self._min_max_norm(win_mat)
+        win_norm = self._min_max_norm(win_mat) #* self.template_scaler
 
         #print(self.template)
-        nsad = -np.sum(np.abs(win_norm - self.template), axis=1) + pos_shift
+        nsad = -np.sum(np.abs(win_norm - self.template), axis=1)
+        abs_mean_nsad = np.abs(np.mean(nsad))
+        #print(abs_mean_nsad)
+        nsad = nsad + abs_mean_nsad
+        
         #nsad = -np.sum(np.abs(win_mat - self.template), axis=1)
         self.last_nsad = nsad
         self.nsad_history.append(nsad.copy())
@@ -460,7 +457,7 @@ class AdaptiveTemplateMatching:
         if enforce_low_amp:
             q_low   = np.quantile(data, low_amp_quantile)
             frac_lo = (win_mat <= q_low).mean(axis=1)
-            low_ok  = frac_lo >= float(low_amp_cover)
+            low_ok  = frac_lo >= float(0)
         else:
             low_ok = np.ones(len(nsad), dtype=bool)
 
@@ -475,10 +472,10 @@ class AdaptiveTemplateMatching:
         pearson_corr_arr = self._rolling_window_correlation(self.template, win_norm[idx_cand])
 
         accepted, scores = self._matrix_accepted_inds_rms_calculations(pearson_corr_arr = pearson_corr_arr, norm_data = win_norm, 
-                                                                    idx_cand = idx_cand, rel_err= rel_err, threshold = threshold, first_half_err_thresh = flat_err_thresh)
+                                                                    idx_cand = idx_cand, rel_err= rel_err, first_half_err_thresh = flat_err_thresh)
         # Debug: panel 1
         if show_debug:
-            self._plot_nsad_legacy_visual(sad_vis, title="−Σ|Δ|  (no shift)")
+            self._plot_nsad_legacy_visual(sad_vis, float(0), title="−Σ|Δ|  (no shift)")
 
             if enforce_low_amp:
                 self._debug_plots(signal_data = data, mark_data = accepted, horiz_axis_line_inds = [],
@@ -486,6 +483,7 @@ class AdaptiveTemplateMatching:
                                 plot_option = "nsad_legacy")
 
         # Cluster merge 
+        accepted = np.asarray(accepted, int)
         if accepted.size > 1:
             order    = np.argsort(accepted)
             acc_sort = accepted[order]
@@ -498,7 +496,7 @@ class AdaptiveTemplateMatching:
             elif cluster_metric == "nsad_shifted":
                 tmp = nsad.copy()
                 if acc_sort.size:
-                    tmp[acc_sort] = tmp[acc_sort] #+ pos_shift
+                    tmp[acc_sort] = tmp[acc_sort]
                 metric_seq = tmp[acc_sort]
             else:
                 raise ValueError("cluster_metric must be 'r', 'nsad', or 'nsad_shifted'.")
@@ -538,9 +536,9 @@ class AdaptiveTemplateMatching:
             print("⚠️  No matches – template unchanged.")
             return
         w = self.win
-        segs = [self._min_max_norm(data[int(i - w / 2):int(i + w / 2)]) for i in match_idx]
+        segs = [data[int(i - w / 2):int(i + w / 2)] for i in match_idx]
         self.template = np.mean(segs, axis = 0)
-        self.template = self.template * self.template_scaler
+        #self.template = self.template #* 0.1
         #self.template_history.append(self.template.copy())
 
         if show_debug:
@@ -550,13 +548,12 @@ class AdaptiveTemplateMatching:
 
 
     def _final_template_match_and_plot(self, name, data,
-                                  threshold, amp_max,
-                                  pos_shift, sad_thresh,
+                                  amp_max,
+                                  sad_thresh,
                                   min_std=1e-3,
                                   rel_err=0.20,
                                   enforce_low_amp=True,
                                   low_amp_quantile=0.10,
-                                  low_amp_cover=0.60,
                                   # NEW:
                                   cluster_metric="nsad",
                                   cluster_radius=None,
@@ -567,15 +564,12 @@ class AdaptiveTemplateMatching:
         Args:
             name: Label used in plot titles and summary output.
             data: Input signal to scan.
-            threshold: Minimum Pearson correlation required for a candidate.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             rel_err: Maximum allowed relative RMS error after template fitting.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches.
             cluster_radius: Maximum distance between nearby matches before clustering.
             show_debug: Whether to show debugging plots.
@@ -589,17 +583,14 @@ class AdaptiveTemplateMatching:
         """
 
         # Scanning data with template for matches
-        idx, sco = self._scan_matches(
+        idx, score = self._scan_matches(
             data,
-            threshold,
             amp_max,
             rel_err,
-            pos_shift=pos_shift,
             sad_thresh=sad_thresh,
             min_std=min_std,
             enforce_low_amp=enforce_low_amp,
             low_amp_quantile=low_amp_quantile,
-            low_amp_cover=low_amp_cover,
             # ↓↓↓
             cluster_metric=cluster_metric,
             cluster_radius=cluster_radius,
@@ -612,13 +603,13 @@ class AdaptiveTemplateMatching:
             self._debug_plots(signal_data = data, mark_data = np.array([]), horiz_axis_line_inds = [],
                             vert_axis_line_inds = idx, title = f"{name}  final matches (n={len(idx)})",
                             label = 0, plot_option = "matches")
-
-        if sco.size:
-            print(f"✅ {len(idx)} matches | mean r = {sco.mean():.4f}")
+        score = np.asarray(score, float)
+        if score.size:
+            print(f"✅ {len(idx)} matches | mean r = {score.mean():.4f}")
         else:
             print("No matches found")
 
-        return idx, sco
+        return idx, score
 
     """
     Do `passes` of scan→update on a single dataset, then finalize and plot.
@@ -629,11 +620,10 @@ class AdaptiveTemplateMatching:
     - Clustering is applied during scanning to reduce near-duplicates.
     """
     def _run_dataset(self, data, name,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=True,
                     low_amp_quantile=0.10,
-                    low_amp_cover=0.60,
                     # :
                     cluster_metric="nsad",
                     cluster_radius=None,
@@ -644,15 +634,12 @@ class AdaptiveTemplateMatching:
             data: Input signal to process.
             name: Label used in plots and summary output.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
-            thr: Minimum Pearson correlation required for a candidate.
             rel_err: Maximum allowed relative RMS error after template fitting.
             passes: Number of scan-update passes to run before the final scan.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches.
             cluster_radius: Maximum distance between nearby matches before clustering.
             show_debug: Whether to show debugging plots during processing.
@@ -669,13 +656,11 @@ class AdaptiveTemplateMatching:
             if debug_verbose:
                 print(f"   pass {p+1}/{passes}")
             idx, _ = self._scan_matches(
-                data, thr, amp_max, rel_err,
-                pos_shift=pos_shift,
+                data, amp_max, rel_err,
                 sad_thresh=sad_thresh,
                 min_std=min_std,
                 enforce_low_amp=enforce_low_amp,
                 low_amp_quantile=low_amp_quantile,
-                low_amp_cover=low_amp_cover,
                 # ↓↓↓
                 cluster_metric=cluster_metric,
                 cluster_radius=cluster_radius,
@@ -687,9 +672,9 @@ class AdaptiveTemplateMatching:
         
         # Final pass of the refined template
         final_marked_indices, final_marked_indices_scores = self._final_template_match_and_plot(
-            name, data, thr, amp_max,
-            pos_shift, sad_thresh, min_std, rel_err,
-            enforce_low_amp, low_amp_quantile, low_amp_cover,
+            name, data, amp_max,
+            sad_thresh, min_std, rel_err,
+            enforce_low_amp, low_amp_quantile,
             # ↓↓↓
             cluster_metric=cluster_metric,
             cluster_radius=cluster_radius,
@@ -702,11 +687,10 @@ class AdaptiveTemplateMatching:
 
     
     def cold_start_run_dataset(self, data_dict: dict,
-                    amp_max: float, thr: float, rel_err: float, passes: int,
-                    pos_shift: float, sad_thresh: float, min_std: float,
+                    amp_max: float, rel_err: float, passes: int,
+                    sad_thresh: float, min_std: float,
                     enforce_low_amp: bool=True,
                     low_amp_quantile: float=0.10,
-                    low_amp_cover: float=0.60,
                     # :
                     cluster_metric: str="nsad",
                     cluster_radius: int=None,
@@ -716,15 +700,12 @@ class AdaptiveTemplateMatching:
         Args:
             data_dict: Mapping of dataset names to input signal arrays.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
-            thr: Minimum Pearson correlation required for a candidate.
             rel_err: Maximum allowed relative RMS error after template fitting.
             passes: Number of scan-update passes to run before the final scan.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches.
             cluster_radius: Maximum distance between nearby matches before clustering.
             show_debug: Whether to show debugging plots during processing.
@@ -745,11 +726,10 @@ class AdaptiveTemplateMatching:
         for dataKey in data_dict:
             print(dataKey)
             return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
                     low_amp_quantile=low_amp_quantile,
-                    low_amp_cover=low_amp_cover,
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
@@ -762,11 +742,10 @@ class AdaptiveTemplateMatching:
         return return_dict
 
     def warm_start_run_dataset(self, data_dict: dict, name: str,
-                    amp_max: float, thr: float, rel_err: float, passes: int,
-                    pos_shift: float, sad_thresh: float, min_std: float,
+                    amp_max: float, rel_err: float, passes: int,
+                    sad_thresh: float, min_std: float,
                     enforce_low_amp: bool=True,
                     low_amp_quantile: float=0.10,
-                    low_amp_cover: float=0.60,
                     # :
                     cluster_metric: str="nsad",
                     cluster_radius: int=None,
@@ -777,15 +756,12 @@ class AdaptiveTemplateMatching:
             data_dict: Mapping of dataset names to input signal arrays.
             name: Dataset name to use for template warm-starting, or `None` to choose one automatically.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
-            thr: Minimum Pearson correlation required for a candidate.
             rel_err: Maximum allowed relative RMS error after template fitting.
             passes: Number of scan-update passes to run during warm-starting.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches.
             cluster_radius: Maximum distance between nearby matches before clustering.
             show_debug: Whether to show debugging plots during processing.
@@ -810,11 +786,10 @@ class AdaptiveTemplateMatching:
         # Update the template on the selected dataset
         print(f"Updating template on {datasetToTrain}")
         self._run_dataset(data_dict[datasetToTrain], datasetToTrain,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
                     low_amp_quantile=low_amp_quantile,
-                    low_amp_cover=low_amp_cover,
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
@@ -828,11 +803,10 @@ class AdaptiveTemplateMatching:
         for dataKey in data_dict:
             print(dataKey)
             return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
                     low_amp_quantile=low_amp_quantile,
-                    low_amp_cover=low_amp_cover,
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
@@ -845,11 +819,10 @@ class AdaptiveTemplateMatching:
 
     
     def all_data_run_dataset(self, data_dict: dict,
-                    amp_max: float, thr: float, rel_err: float, passes: int,
-                    pos_shift: float, sad_thresh: float, min_std: float,
+                    amp_max: float, rel_err: float, passes: int,
+                    sad_thresh: float, min_std: float,
                     enforce_low_amp: bool=True,
                     low_amp_quantile: float=0.10,
-                    low_amp_cover: float=0.60,
                     # :
                     cluster_metric: str="nsad",
                     cluster_radius: int=None,
@@ -859,15 +832,12 @@ class AdaptiveTemplateMatching:
         Args:
             data_dict: Mapping of dataset names to input signal arrays.
             amp_max: Maximum allowed absolute amplitude within a candidate window.
-            thr: Minimum Pearson correlation required for a candidate.
             rel_err: Maximum allowed relative RMS error after template fitting.
             passes: Number of scan-update passes to run for each dataset during adaptation.
-            pos_shift: Constant added to the SAD trace for thresholding and plotting.
             sad_thresh: Minimum SAD score required to keep a candidate.
             min_std: Minimum standard deviation required for a candidate window.
             enforce_low_amp: Whether to require low-amplitude coverage in each window.
             low_amp_quantile: Quantile used to define low-amplitude samples.
-            low_amp_cover: Minimum fraction of samples that must be below the low-amplitude threshold.
             cluster_metric: Metric used to merge nearby matches.
             cluster_radius: Maximum distance between nearby matches before clustering.
             show_debug: Whether to show debugging plots during processing.
@@ -888,11 +858,10 @@ class AdaptiveTemplateMatching:
         print("Updating template across all datasets")
         for dataKey in data_dict:
             self._run_dataset(data_dict[dataKey], dataKey,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
                     low_amp_quantile=low_amp_quantile,
-                    low_amp_cover=low_amp_cover,
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
@@ -907,11 +876,10 @@ class AdaptiveTemplateMatching:
 
         for dataKey in data_dict:
             return_dict[dataKey], self.final_scores_dict[dataKey] = self._run_dataset(data_dict[dataKey], dataKey,
-                    amp_max, thr, rel_err, passes,
-                    pos_shift, sad_thresh, min_std,
+                    amp_max, rel_err, passes,
+                    sad_thresh, min_std,
                     enforce_low_amp=enforce_low_amp,
                     low_amp_quantile=low_amp_quantile,
-                    low_amp_cover=low_amp_cover,
                     # :
                     cluster_metric=cluster_metric,
                     cluster_radius=cluster_radius,
@@ -954,4 +922,3 @@ class AdaptiveTemplateMatching:
         """
         return self.template_history_dict
     
-
