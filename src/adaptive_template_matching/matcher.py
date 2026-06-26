@@ -857,6 +857,7 @@ class AdaptiveTemplateMatching:
         # Update the template on all the datasets first before a final parse
         print("Updating template across all datasets")
         for dataKey in data_dict:
+            
             self._run_dataset(data_dict[dataKey], dataKey,
                     amp_max, rel_err, passes,
                     sad_thresh, min_std,
@@ -869,6 +870,7 @@ class AdaptiveTemplateMatching:
             )
             self.nsad_history = []
             self.template_history_dict[dataKey] = self.template
+            self.template = self._min_max_norm(self.template)
 
         # Don't perform any more updates, use the template updated across all datasets
         passes = 0
