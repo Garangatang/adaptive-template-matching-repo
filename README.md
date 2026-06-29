@@ -75,7 +75,7 @@ Until the paper citation is added, cite the project repository and authors and r
 
 ## Previous Versions
 
-A non-automated V1 version is located [here](https://github.com/Garangatang/Gait_Cycle_Template_Matching/tree/main)
+A non-automated V1 version is located [here](https://github.com/Garangatang/Non_Automated_Adaptive_Gait_Cycle_Template_Matching/tree/main)
 
 ## Collaborators
 
