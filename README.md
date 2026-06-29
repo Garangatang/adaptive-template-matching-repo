@@ -61,6 +61,18 @@ src/adaptive_template_matching/
 - The GUI chooses `PyQt5` on macOS, `PySide6` on Windows, and `PyQt5` as the fallback elsewhere.
 - The original source files are still present in the repository root for reference, while the installable package lives under `src/`.
 
+## License and Citation
+
+This repository is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+
+Use, sharing, adaptation, or redistribution of this work requires attribution to Adaptive Template Matching, Grange Simpson, and Ivan Khimach, plus citation of the associated academic paper:
+
+```text
+[Academic paper citation and link to be added.]
+```
+
+Until the paper citation is added, cite the project repository and authors and retain the citation placeholder in redistributions.
+
 ## Previous Versions
 
 A non-automated V1 version is located [here](https://github.com/Garangatang/Gait_Cycle_Template_Matching/tree/main)
